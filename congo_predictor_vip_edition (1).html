@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CONGO PREDICTOR - VIP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #050505;
+            color: #e4e4e7;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Анимации */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        
+        @keyframes pulse-glow { 
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 230, 118, 0.2); } 
+            50% { box-shadow: 0 0 30px rgba(0, 230, 118, 0.6); } 
+        }
+        .btn-pulse { animation: pulse-glow 2s infinite; }
+        
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
+        }
+
+        /* Глассморфизм */
+        .glass-panel { 
+            background: rgba(20, 20, 25, 0.7); 
+            backdrop-filter: blur(12px); 
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05); 
+        }
+
+        /* Выбор игры */
+        .game-btn { 
+            position: relative; overflow: hidden; transition: all 0.3s ease; 
+            border: 2px solid transparent;
+        }
+        .game-btn.active { 
+            border-color: #00E676; 
+            background: rgba(0, 230, 118, 0.1);
+            transform: translateY(-2px); 
+            box-shadow: 0 5px 15px rgba(0, 230, 118, 0.2);
+        }
+        .game-btn.active::after {
+            content: '✓'; position: absolute; top: 4px; right: 4px;
+            background: #00E676; color: black; width: 18px; height: 18px;
+            border-radius: 50%; font-size: 12px; display: flex;
+            align-items: center; justify-content: center; font-weight: bold;
+        }
+
+        /* Терминал взлома */
+        .terminal-screen {
+            position: fixed; inset: 0; background: #020202; z-index: 9999;
+            padding: 20px; font-family: 'JetBrains Mono', monospace; color: #00E676;
+            font-size: 13px; line-height: 1.6; display: none; flex-direction: column;
+        }
+        .terminal-screen::after {
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(to bottom, rgba(0,230,118,0) 0%, rgba(0,230,118,0.1) 50%, rgba(0,230,118,0) 100%);
+            height: 10px; animation: scanline 4s linear infinite; pointer-events: none;
+        }
+        .term-line { margin-bottom: 6px; text-shadow: 0 0 4px rgba(0, 230, 118, 0.4); opacity: 0; animation: fadeIn 0.2s forwards; }
+
+        /* Уведомления выплат */
+        .live-toast {
+            position: fixed; top: 20px; right: -120%; z-index: 5000;
+            background: rgba(10, 10, 15, 0.95); border: 1px solid rgba(0, 230, 118, 0.2); 
+            border-left: 4px solid #00E676; border-radius: 8px; padding: 12px 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: right 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            display: flex; align-items: center; gap: 12px; width: 300px; max-width: 90vw;
+        }
+        .live-toast.show { right: 20px; }
+
+        /* Модальные окна */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            z-index: 1000; display: none; opacity: 0; transition: opacity 0.3s;
+            align-items: center; justify-content: center; padding: 16px;
+        }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        
+        .modal-content {
+            background: #111115; border: 1px solid #27272a; border-radius: 20px;
+            width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto;
+            transform: translateY(20px); transition: transform 0.3s; position: relative;
+        }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+    </style>
+</head>
+<body class="flex flex-col items-center min-h-screen relative">
+
+    <div id="live-toast" class="live-toast">
+        <div class="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center shrink-0 border border-green-500/30">
+            <span class="text-green-500 text-xl">💸</span>
+        </div>
+        <div>
+            <p id="toast-title" class="text-white text-xs font-bold">...</p>
+            <p id="toast-desc" class="text-green-400 text-[11px] font-medium mt-0.5">...</p>
+        </div>
+    </div>
+
+    <div id="terminal-screen" class="terminal-screen">
+        <div class="flex items-center justify-between border-b border-green-500/30 pb-2 mb-4 opacity-50">
+            <span>KRAKEN TERMINAL v3.1 // KINSHASA NODE</span>
+            <span class="animate-pulse">_</span>
+        </div>
+        <div id="terminal-content" class="w-full flex-1 overflow-hidden"></div>
+    </div>
+
+    <div id="view-landing" class="flex-1 w-full max-w-md flex flex-col items-center justify-center p-6 animate-fade-in">
+        <div class="text-center mb-8">
+            <div class="w-24 h-24 mx-auto bg-zinc-900 rounded-full flex items-center justify-center border border-zinc-800 mb-6 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
+                <span class="text-5xl">🤖</span>
+            </div>
+            <h1 class="text-4xl font-black text-white tracking-tight mb-2">CONGO <span class="text-[#00E676]">PREDICTOR</span></h1>
+            <p class="text-xs text-zinc-500 uppercase tracking-widest font-bold">Système d'Exploitation IA</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6 w-full text-center relative overflow-hidden mb-8">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#00E676] to-transparent opacity-50"></div>
+            <div class="inline-block bg-red-500/10 border border-red-500/30 text-red-500 text-[10px] font-bold px-3 py-1 rounded-full mb-4">
+                ⚠️ PLACES LIMITÉES (14 RESTANTES)
+            </div>
+            <h2 class="text-xl font-bold text-white mb-3">Piratage d'Algorithmes</h2>
+            <p class="text-sm text-zinc-400 leading-relaxed mb-6">
+                Notre réseau neuronal analyse les serveurs 1XBET en RDC en temps réel. Précision actuelle: <span class="text-[#00E676] font-bold">97.2%</span>.
+            </p>
+            <button id="btn-start" class="w-full bg-[#00E676] hover:bg-[#00c853] text-black py-4 rounded-xl font-black text-lg transition-all btn-pulse flex items-center justify-center gap-2">
+                DÉMARRER LE SYSTÈME
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </button>
+        </div>
+        
+        <div class="flex gap-4 justify-center opacity-40 grayscale">
+            <span class="text-[10px] font-black tracking-wider text-red-500">AIRTEL</span>
+            <span class="text-[10px] font-black border-l border-zinc-700 pl-4 tracking-wider text-orange-500">ORANGE</span>
+            <span class="text-[10px] font-black border-l border-zinc-700 pl-4 tracking-wider text-green-500">M-PESA</span>
+        </div>
+    </div>
+
+    <div id="view-quiz" class="hidden flex-1 w-full max-w-md flex-col items-center justify-center p-6 animate-fade-in">
+        <div class="glass-panel rounded-2xl p-6 w-full relative">
+            <div class="flex justify-between items-center mb-6 border-b border-zinc-800 pb-4">
+                <span class="text-xs text-zinc-500 font-bold" id="quiz-step-counter">Étape 1 sur 2</span>
+                <span class="w-2 h-2 bg-[#00E676] rounded-full animate-pulse"></span>
+            </div>
+            <div id="quiz-container" class="w-full">
+                <!-- Контент инжектится через JS -->
+            </div>
+        </div>
+    </div>
+
+    <div id="view-main" class="hidden w-full max-w-md flex-col items-center p-4 pt-6 pb-20 animate-fade-in">
+        
+        <!-- Шапка -->
+        <div class="w-full flex items-center justify-between mb-6 glass-panel p-3 rounded-xl">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">🤖</div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 bg-[#00E676] rounded-full animate-pulse"></span>
+                        <span class="text-[10px] font-black text-[#00E676] tracking-wider">EN LIGNE</span>
+                    </div>
+                    <p class="text-[9px] text-zinc-500 font-mono mt-0.5" id="session-id">ID: 0x8F2A...B19</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] text-zinc-500">Objectif visé</p>
+                <p id="target-info" class="text-sm font-black text-white">...</p>
+            </div>
+        </div>
+
+        <div class="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-6">
+            <p class="text-xs text-yellow-500/80 leading-relaxed font-medium">
+                Sélectionnez le jeu que vous souhaitez exploiter. L'IA injectera le script directement dans le flux de données.
+            </p>
+        </div>
+
+        <!-- Выбор игр -->
+        <div class="grid grid-cols-2 gap-3 w-full mb-8">
+            <button type="button" data-game="MINES" class="game-btn glass-panel rounded-xl p-3 flex flex-col items-center justify-center gap-3 h-28">
+                <span class="text-3xl">💣</span>
+                <span class="font-black text-xs text-white tracking-widest">MINES</span>
+            </button>
+            <button type="button" data-game="AVIATOR" class="game-btn glass-panel rounded-xl p-3 flex flex-col items-center justify-center gap-3 h-28">
+                <span class="text-3xl">✈️</span>
+                <span class="font-black text-xs text-white tracking-widest">AVIATOR</span>
+            </button>
+            <button type="button" data-game="APPLE" class="game-btn glass-panel rounded-xl p-3 flex flex-col items-center justify-center gap-3 h-28 col-span-2">
+                <span class="text-3xl">🍏</span>
+                <span class="font-black text-xs text-white tracking-widest">APPLE OF FORTUNE</span>
+            </button>
+        </div>
+
+        <button type="button" id="btn-hack" class="w-full bg-zinc-800 text-zinc-500 py-4 rounded-xl font-black text-sm tracking-wider transition-all flex items-center justify-center gap-2 pointer-events-none border border-zinc-700">
+            <span id="text-btn-hack">SÉLECTIONNEZ UN JEU</span>
+        </button>
+    </div>
+
+    <div id="main-modal" class="modal-overlay">
+        <div class="modal-content p-6">
+            
+            <!-- Кнопка закрытия -->
+            <button type="button" class="close-modal-btn absolute top-4 right-4 w-8 h-8 bg-zinc-900 rounded-full flex items-center justify-center text-zinc-500 hover:text-white border border-zinc-800 z-10 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <!-- Состояние 1: Ошибка после терминала -->
+            <div id="modal-state-error" class="flex flex-col items-center text-center">
+                <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30 btn-pulse">
+                    <span class="text-2xl">⚠️</span>
+                </div>
+                <h3 class="text-xl font-black text-white mb-2">ÉCHEC DE L'INJECTION</h3>
+                <p class="text-xs text-zinc-400 mb-6 leading-relaxed">
+                    Le système de sécurité a bloqué la tentative. <br><br>
+                    <span class="text-white font-medium">Pour contourner l'anti-fraude, vous DEVEZ utiliser un nouveau compte vierge synchronisé avec notre base de données.</span>
+                </p>
+                <button type="button" id="btn-to-register" class="w-full bg-white text-black py-3 rounded-lg font-bold text-sm">
+                    RÉSOUDRE LE PROBLÈME
+                </button>
+            </div>
+
+            <!-- Состояние 2: Регистрация и ввод ID -->
+            <div id="modal-state-register" class="hidden flex-col items-center">
+                <div class="text-center mb-6">
+                    <h3 class="text-xl font-black text-white">SYNCHRONISATION</h3>
+                    <p class="text-xs text-zinc-500 mt-1">Créez un compte compatible</p>
+                </div>
+                
+                <div class="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-xs text-zinc-300 leading-relaxed mb-6 space-y-3">
+                    <p>1. Cliquez sur le bouton ci-dessous pour créer un <span class="text-white font-bold">NOUVEAU</span> compte.</p>
+                    <p>2. Lors de l'inscription, utilisez le code promo VIP: <br>
+                       <span class="inline-block mt-1 bg-[#00E676]/20 text-[#00E676] font-bold text-sm px-2 py-1 rounded font-mono border border-[#00E676]/30">CONGO888</span>
+                    </p>
+                    <p>3. Revenez ici et entrez votre nouvel ID.</p>
+                </div>
+                
+                <a href="https://reffpa.com/L?tag=d_5547148m_69917c_&site=5547148&ad=69917&r=registration" target="_blank" class="w-full bg-[#00E676] hover:bg-[#00c853] text-black py-4 rounded-xl font-black text-sm flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(0,230,118,0.3)]">
+                    ALLER À L'INSCRIPTION
+                </a>
+
+                <div class="w-full border-t border-zinc-800 pt-5">
+                    <input type="text" id="input-id" maxlength="10" placeholder="Entrez le nouvel ID (10 chiffres)" class="w-full bg-black border border-zinc-700 text-white rounded-lg p-3 outline-none focus:border-[#00E676] transition-colors text-center font-mono mb-2 text-sm">
+                    <p id="error-msg" class="text-[10px] text-red-500 text-center hidden mb-2"></p>
+                    <button type="button" id="btn-verify-id" class="w-full bg-zinc-800 text-white hover:bg-zinc-700 py-3 rounded-lg font-bold text-sm transition-colors border border-zinc-700">
+                        VÉRIFIER MON ID
+                    </button>
+                </div>
+            </div>
+
+            <!-- Состояние 3: Успешная привязка -->
+            <div id="modal-state-success" class="hidden flex-col items-center text-center">
+                <div class="w-20 h-20 bg-[#00E676]/10 text-[#00E676] rounded-full flex items-center justify-center mb-4 border border-[#00E676]/30">
+                    <span class="text-4xl">✅</span>
+                </div>
+                <h3 class="text-2xl font-black text-white mb-2">CONNEXION RÉUSSIE</h3>
+                <p class="text-sm text-[#00E676] font-mono mb-6">Compte synchronisé avec l'IA</p>
+                <div class="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 text-xs text-zinc-400">
+                    Système prêt. Vous pouvez maintenant sélectionner un jeu et obtenir vos signaux.
+                </div>
+            </div>
+
+            <div id="modal-state-deposit" class="hidden flex-col items-center text-center">
+                <div class="w-16 h-16 bg-yellow-500/10 text-yellow-500 rounded-full flex items-center justify-center mb-4 border border-yellow-500/30">
+                    <span class="text-2xl">⚠️</span>
+                </div>
+                <h3 class="text-xl font-black text-white mb-3">SOLDE ZÉRO DÉTECTÉ</h3>
+                
+                <div class="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 mb-4 text-left">
+                    <p class="text-[11px] text-zinc-300 leading-relaxed mb-3">
+                        L'IA est bien connectée, mais <span class="text-white font-bold">le système anti-fraude de 1XBET bloque les algorithmes sur les comptes vides</span> (considérés comme des bots).
+                    </p>
+                    <p class="text-[11px] text-zinc-300 leading-relaxed mb-4">
+                        Pour générer un "hash financier" et contourner le pare-feu, vous devez activer ce <span class="text-[#00E676] font-bold underline">NOUVEAU</span> compte avec un premier dépôt.
+                    </p>
+                    
+                    <div class="bg-black/50 p-3 rounded-lg border border-zinc-800 mb-3 text-center">
+                        <p class="text-[10px] text-zinc-500 mb-1">Dépôt d'activation requis :</p>
+                        <p class="text-xl text-yellow-500 font-black font-mono">6 500 CDF</p>
+                    </div>
+
+                    <div class="flex justify-center gap-2 mb-1">
+                        <div class="bg-red-600 px-2 py-1 rounded text-[9px] font-black text-white">AIRTEL</div>
+                        <div class="bg-orange-500 px-2 py-1 rounded text-[9px] font-black text-white">ORANGE</div>
+                        <div class="bg-green-600 px-2 py-1 rounded text-[9px] font-black text-white">M-PESA</div>
+                    </div>
+                </div>
+
+                <p class="text-[10px] text-zinc-400 font-medium mb-4">
+                    Cet argent reste le vôtre et servira pour vos paris. Faites le dépôt, puis envoyez la capture d'écran au manager.
+                </p>
+
+                <!-- Замени ссылку на свой телеграм -->
+                <a href="https://t.me/твой_телеграм" target="_blank" class="w-full bg-[#2AABEE] text-white py-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(42,171,238,0.3)]">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.888-.662 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                    ENVOYER LA CAPTURE
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Конфиг данных
+        const quizData = [
+            { question: "Quel est votre objectif de gain quotidien ?", options: ["50 000 CDF", "150 000 CDF", "412 500 CDF"] },
+            { question: "Temps disponible pour jouer ?", options: ["1-2 heures", "3-5 heures", "Toute la journée"] }
+        ];
+        
+        let currentStep = 0;
+        let userData = { goal: '', time: '' };
+        let selectedGame = '';
+        let isAccountLinked = false;
+
+        // Элементы DOM
+        const viewLanding = document.getElementById('view-landing');
+        const viewQuiz = document.getElementById('view-quiz');
+        const viewMain = document.getElementById('view-main');
+        const quizContainer = document.getElementById('quiz-container');
+        const btnStart = document.getElementById('btn-start');
+        
+        // Навигация
+        btnStart.addEventListener('click', () => {
+            viewLanding.classList.add('hidden');
+            viewLanding.classList.remove('flex');
+            viewQuiz.classList.remove('hidden');
+            viewQuiz.classList.add('flex');
+            renderQuiz();
+        });
+
+        // Логика квиза
+        function renderQuiz() {
+            const step = quizData[currentStep];
+            document.getElementById('quiz-step-counter').textContent = `Étape ${currentStep + 1} sur ${quizData.length}`;
+            
+            quizContainer.innerHTML = `
+                <h3 class="text-white text-lg font-bold mb-5 text-center">${step.question}</h3>
+                <div class="grid gap-3 w-full">
+                    ${step.options.map((opt) => `
+                        <button type="button" data-ans="${opt}" class="quiz-btn w-full bg-zinc-900 border border-zinc-700 p-4 rounded-xl text-sm font-bold hover:bg-white hover:text-black transition-all">
+                            ${opt}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+
+            document.querySelectorAll('.quiz-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    handleQuizAnswer(e.target.getAttribute('data-ans'));
+                });
+            });
+        }
+
+        function handleQuizAnswer(answer) {
+            if(currentStep === 0) userData.goal = answer;
+            else userData.time = answer;
+            
+            currentStep++;
+            if(currentStep < quizData.length) {
+                renderQuiz();
+            } else {
+                document.getElementById('quiz-step-counter').textContent = "Analyse en cours...";
+                quizContainer.innerHTML = `
+                    <div class="py-10 flex flex-col items-center">
+                        <div class="w-10 h-10 border-4 border-[#00E676] border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p class="text-xs text-zinc-400">Génération du profil...</p>
+                    </div>`;
+                
+                setTimeout(() => {
+                    document.getElementById('target-info').textContent = userData.goal;
+                    viewQuiz.classList.add('hidden');
+                    viewQuiz.classList.remove('flex');
+                    viewMain.classList.remove('hidden');
+                    viewMain.classList.add('flex');
+                }, 1500);
+            }
+        }
+
+        // Выбор игр
+        const gameBtns = document.querySelectorAll('.game-btn');
+        const btnHack = document.getElementById('btn-hack');
+        const textBtnHack = document.getElementById('text-btn-hack');
+
+        gameBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                gameBtns.forEach(b => b.classList.remove('active'));
+                const currentBtn = e.currentTarget;
+                currentBtn.classList.add('active');
+                
+                selectedGame = currentBtn.getAttribute('data-game');
+                
+                btnHack.classList.remove('bg-zinc-800', 'text-zinc-500', 'pointer-events-none', 'border-zinc-700');
+                if(!isAccountLinked) {
+                    btnHack.classList.add('bg-[#00E676]', 'text-black', 'border-[#00E676]', 'btn-pulse');
+                    textBtnHack.textContent = "INJECTER LE SCRIPT";
+                } else {
+                    btnHack.classList.add('bg-blue-600', 'text-white', 'border-blue-500', 'btn-pulse');
+                    textBtnHack.textContent = "OBTENIR LE SIGNAL VIP";
+                }
+            });
+        });
+
+        const terminalScreen = document.getElementById('terminal-screen');
+        const terminalContent = document.getElementById('terminal-content');
+        
+        const terminalLinesHacking = [
+            "> INITIALISATION DU PROTOCOLE KRAKEN...",
+            "> CONNEXION AU SERVEUR 1XBET (KIN-01)... <span class='text-white font-bold'>[OK]</span>",
+            "> RECHERCHE DE VULNÉRABILITÉ SUR [GAME]... <span class='text-yellow-500 font-bold'>[EN COURS]</span>",
+            "> EXPLOIT TROUVÉ (FAILLE RNG v4.2)",
+            "> TENTATIVE D'INJECTION DU SCRIPT...",
+            "> ANALYSE DU COMPTE UTILISATEUR...",
+            "<span class='text-red-500 font-bold bg-red-950 px-1'>[!] ALERTE DE SÉCURITÉ: COMPTE TRACÉ. CONNEXION REJETÉE.</span>"
+        ];
+
+        const terminalLinesBalance = [
+            "> CONNEXION AU COMPTE SÉCURISÉ...",
+            "> VÉRIFICATION DU STATUT... <span class='text-[#00E676] font-bold'>[OK]</span>",
+            "> CONTOURNEMENT DU PARE-FEU... <span class='text-[#00E676] font-bold'>[OK]</span>",
+            "> ANALYSE DU SOLDE DISPONIBLE...",
+            "<span class='text-yellow-500 font-bold'>[!] ERREUR: SOLDE = 0.00 CDF</span>",
+            "<span class='text-red-500 font-bold bg-red-950 px-1'>[!] COMPTE BLOQUÉ PAR L'ANTI-BOT (ABSENCE DE HASH FINANCIER)</span>"
+        ];
+
+        btnHack.addEventListener('click', () => {
+            terminalScreen.style.display = 'flex';
+            terminalContent.innerHTML = '';
+            let lineIndex = 0;
+            let currentLines = isAccountLinked ? terminalLinesBalance : terminalLinesHacking;
+            
+            function showNextLine() {
+                if (lineIndex < currentLines.length) {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'term-line';
+                    lineDiv.innerHTML = currentLines[lineIndex].replace('[GAME]', selectedGame);
+                    terminalContent.appendChild(lineDiv);
+                    
+                    lineIndex++;
+                    setTimeout(showNextLine, Math.random() * 500 + 300);
+                } else {
+                    setTimeout(() => {
+                        terminalScreen.style.display = 'none';
+                        if (isAccountLinked) {
+                            openModal('deposit');
+                        } else {
+                            openModal('error');
+                        }
+                    }, 1500);
+                }
+            }
+            setTimeout(showNextLine, 500);
+        });
+
+        const mainModal = document.getElementById('main-modal');
+        const stateError = document.getElementById('modal-state-error');
+        const stateRegister = document.getElementById('modal-state-register');
+        const stateSuccess = document.getElementById('modal-state-success');
+        const stateDeposit = document.getElementById('modal-state-deposit');
+
+        function openModal(state) {
+            mainModal.classList.add('active');
+            stateError.classList.add('hidden');
+            stateRegister.classList.add('hidden');
+            stateSuccess.classList.add('hidden');
+            stateDeposit.classList.add('hidden');
+
+            if(state === 'error') {
+                stateError.classList.remove('hidden');
+                stateError.classList.add('flex');
+            } else if (state === 'register') {
+                stateRegister.classList.remove('hidden');
+                stateRegister.classList.add('flex');
+            } else if (state === 'success') {
+                stateSuccess.classList.remove('hidden');
+                stateSuccess.classList.add('flex');
+            } else if (state === 'deposit') {
+                stateDeposit.classList.remove('hidden');
+                stateDeposit.classList.add('flex');
+            }
+        }
+
+        document.querySelectorAll('.close-modal-btn').forEach(btn => {
+            btn.addEventListener('click', () => mainModal.classList.remove('active'));
+        });
+
+        document.getElementById('btn-to-register').addEventListener('click', () => {
+            openModal('register');
+        });
+
+        document.getElementById('btn-verify-id').addEventListener('click', () => {
+            const inputEl = document.getElementById('input-id');
+            const val = inputEl.value.trim();
+            const btnVerify = document.getElementById('btn-verify-id');
+            const errorMsg = document.getElementById('error-msg');
+            
+            if(val.length !== 10 || !/^\d+$/.test(val)) {
+                errorMsg.textContent = 'Erreur: L\'ID doit contenir exactement 10 chiffres.';
+                errorMsg.classList.remove('hidden');
+                return;
+            }
+            
+            btnVerify.disabled = true;
+            btnVerify.textContent = 'Connexion API...';
+            errorMsg.classList.add('hidden');
+
+            setTimeout(() => {
+                if (!val.startsWith('182')) {
+                    errorMsg.innerHTML = 'Échec: Ce compte n\'est pas nouveau.<br>Vous devez créer un <span class="text-white font-bold">NOUVEAU</span> compte avec le code promo.';
+                    errorMsg.classList.remove('hidden');
+                    btnVerify.disabled = false;
+                    btnVerify.textContent = 'VÉRIFIER MON ID';
+                } else {
+                    // Успех
+                    isAccountLinked = true;
+                    document.getElementById('session-id').textContent = `ID: ${val}`;
+                    openModal('success');
+                    
+                    setTimeout(() => {
+                        mainModal.classList.remove('active');
+                        textBtnHack.textContent = "OBTENIR LE SIGNAL VIP";
+                        btnHack.classList.remove('bg-[#00E676]', 'text-black', 'border-[#00E676]');
+                        btnHack.classList.add('bg-blue-600', 'text-white', 'border-blue-500');
+                        
+                        btnVerify.disabled = false;
+                        btnVerify.textContent = 'VÉRIFIER MON ID';
+                        inputEl.value = '';
+                    }, 2500);
+                }
+            }, 2000);
+        });
+
+        const toast = document.getElementById('live-toast');
+        const toastTitle = document.getElementById('toast-title');
+        const toastDesc = document.getElementById('toast-desc');
+        
+        const fakeNames = ["Patrick", "Trésor", "Christian", "Emanuel", "Jonathan", "Marc", "Dieumerci", "Fiston", "Grace", "Moise"];
+        const fakeCities = ["Kinshasa", "Lubumbashi", "Goma", "Matadi", "Kolwezi"];
+        const fakeMethods = ["M-Pesa", "Airtel Money", "Orange Money"];
+        
+        function showRandomToast() {
+            if (terminalScreen.style.display === 'flex') {
+                setTimeout(showRandomToast, 5000);
+                return;
+            }
+
+            const name = fakeNames[Math.floor(Math.random() * fakeNames.length)];
+            const city = fakeCities[Math.floor(Math.random() * fakeCities.length)];
+            const method = fakeMethods[Math.floor(Math.random() * fakeMethods.length)];
+            const amount = Math.floor(Math.random() * 150 + 20) * 1000; 
+
+            toastTitle.innerHTML = `<span class="text-white">${name}</span> <span class="text-zinc-500 font-normal">(${city})</span>`;
+            toastDesc.innerHTML = `A retiré +${amount.toLocaleString('fr-FR')} CDF via ${method}`;
+            
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(showRandomToast, Math.random() * 8000 + 6000); 
+            }, 4000); 
+        }
+
+        setTimeout(showRandomToast, 3000);
+
+    </script>
+</body>
+</html>
